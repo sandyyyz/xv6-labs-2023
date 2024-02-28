@@ -10,7 +10,9 @@ struct page {
     struct sleeplock sllock; // protect the page 
     uint64 flags;// may needed for control
     uint64 pfn;
-    int ref; // reference
+    unsigned int ref; // reference
+    unsigned int order; // order buddy made
+    struct list_head* list_head;
     struct zone* belg_zone;
 };
 
