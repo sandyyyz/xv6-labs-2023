@@ -6,6 +6,7 @@ this file is teh main part of the buddy-system-like allocator we made for xv6
 #include "defs.h"
 #include "memlayout.h"
 #include "tool.h"
+#include "assert.h"
 void *manage_start; // the start of the managed memory
 void *manage_end;
 struct zone zone;        // maybe just 1 zone in xv6
@@ -13,18 +14,18 @@ uint8 bitmap[MAX_PAGES]; // the bit map to track all the pa we can manage in the
                          // system
 struct page manage_pages[MAX_MANAGE_PAGES]; // pages being managed in the system
 
+static inline void __increase_pgref(struct page *page) { page->ref++; }
+static inline void __decrease_pgref(struct page *page) { page->ref--; }
 /// @brief get one locked invalid page, set the page valid
 /// @return
 static inline struct page *__get_one_invalid_pp() {
   struct page *pp = -1;
   for (int i = 0; i < MAX_MANAGE_PAGES; i++) {
     if ((manage_pages[i].flags & PAGE_VALID) == 0) {
-      intr_off();
       acquire(&manage_pages[i].splock);
       manage_pages[i].flags |= PAGE_VALID;
       manage_pages[i].indexp = i;
-      pp->ref++;
-      intr_on();
+      __increase_pgref(pp);
       break;
     }
     return pp;
@@ -100,8 +101,8 @@ void init_buddy() {
   pp->pfn = PA2PFN((uint64)manage_start);
   __add_to_freelist(pp);
 
-  zone.free_area->nr_free = (uint64)manage_end - (uint64)manage_start / PGSIZE;
-  zone.active_area->nr_active = 0;
+  zone.nr_free = (uint64)manage_end - (uint64)manage_start / PGSIZE;
+  zone.nr_active = 0;
   zone.actual_max_order = order;
   release(&pp->splock);
 
@@ -110,29 +111,17 @@ void init_buddy() {
 };
 
 static struct page *__alloc_pages(uint64 gfp_mask, unsigned int order) {
-  unsigned int prefer = order;
-  struct page *page;
-  int i;
-
-  // find the smallest index >= prefer
-  for (i = prefer; i < MAX_ORDER; i++) {
-    if (zone.free_area[i].nr_free != 0)
-      break;
+  struct page *pp;
+find:
+  if (!list_empty(&(zone.free_area[order].list))) {
+    pp = get_page_from_freelist(gfp_mask, order);
   }
-  if (i == MAX_ORDER)
-    return -1;
-  if (i == prefer) {
-    page = __get_freepg(order);
-    return page;
-  }
-
-  // do the division action
-  // and update the buddy bitmap
 
   return -1;
 }
 struct page *alloc_pages(uint64 gfp_mask, unsigned int order) {
-  if (order < 0 || order >= MAX_ORDER)
+  if (order < 0 || order > zone.actual_max_order ||
+      power2(order) > zone.nr_free)
     return -1;
   return __alloc_pages(gfp_mask, order);
 }
@@ -142,16 +131,62 @@ static inline unsigned long __find_buddy_pfn(unsigned long page_pfn,
   return page_pfn ^ (1 << order);
 }
 static struct page *get_page_from_freelist(unsigned long gfp_mask,
-                                           unsigned int order) {}
-// the check should be token before calling this function
-static struct page *__get_freepg(unsigned int order) {
+                                           unsigned int order) {
+  if (order < 0 || order > zone.actual_max_order)
+    return -1;
+  struct page *pp;
+find:
+  if (!list_empty(&(zone.free_area[order].list))) {
+    pp = __get_page_from_freelist(order);
+    __increase_pgref(pp);
+    pp->pfn |= gfp_mask;
+    release(&pp->splock);
+    goto done;
+  } else {
+    for (int i = order + 1; i < zone.actual_max_order + 1; i++) {
+      __buddy_split(i);
+      goto find;
+    }
+  }
 
+done:
+  acquire(&zone.lock);
+  zone.nr_free -= pow2(pp->order);
+  release(&zone.lock);
+#ifdef CONFIG_DEBUG
+  printf("[!DEBUG]: nr_free: %ld\n", zone.nr_free)
+#endif
+      return pp;
+}
+
+// the check should be token before calling this function
+
+/// @brief return a locked order-indicated from freelist
+static struct page *__get_page_from_freelist(unsigned int order) {
+
+  acquire(&zone.free_area[order].splock);
   struct list_head *lh = &zone.free_area[order].list;
   struct list_head *next = lh->next;
-  acquire(&zone.free_area[order].splock);
   __list_del(lh, next->next);
+  release(&zone.free_area[order].splock);
 
   struct page *pg = (struct page *)list_entry(lh, struct page, list);
+  acquire(&pg->splock);
+  pg->list = 0;
+  pg->order = order;
+  return pg;
+}
+static struct page *__get_page_from_activelist(unsigned int order) {
+
+  acquire(&zone.active_area[order].splock);
+  struct list_head *lh = &(zone.active_area[order].list);
+  struct list_head *next = lh->next;
+  __list_del(lh, next->next);
+  release(&zone.active_area[order].splock);
+  struct page *pg = (struct page *)list_entry(lh, struct page, list);
+  acquire(&pg->splock);
+  pg->list = 0;
+  pg->order = order;
   return pg;
 }
 static struct page *__get_page_from_pm(void *pa_start, unsigned int order,
@@ -169,7 +204,7 @@ static struct page *__get_page_from_pm(void *pa_start, unsigned int order,
   initlock(&pg->splock, "page_lock");
   pg->order = order;
   pg->flags |= gfp_mask;
-  pg->ref += 1;
+  __increase_pgref(pg);
   pg->pfn = PA2PFN((uint64)pa_start + PGSIZE);
   pg->belg_zone = &zone;
   return pg;
@@ -177,6 +212,25 @@ static struct page *__get_page_from_pm(void *pa_start, unsigned int order,
 static inline void __add_to_freelist(struct page *page) {
   list_add_tail(page->list, &zone.free_area[page->order].list);
 }
-static inline  void __add_to_activelist(struct page *page) {
+static inline void __add_to_activelist(struct page *page) {
   list_add_tail(page->list, &zone.active_area[page->order].list);
+}
+
+static void __buddy_split(unsigned long order) {
+  assert(order > 0 && order <= zone.actual_max_order);
+  assert(!list_empty(&(zone.free_area[order].list)));
+
+  struct page *page_a;
+  struct page *page_b = __get_one_invalid_pp();
+  assert(page_b != -1);
+  page_a = get_page_from_freelist(0, order);
+
+  page_a->order -= order - 1;
+  page_b->order = order - 1;
+  page_b->flags |= page_a->flags;
+  page_b->pfn = SPLIT_CHILD_PFN(page_a->pfn, order);
+  __add_to_activelist(page_a);
+  __add_to_activelist(page_b);
+  release(&page_a->splock);
+  release(&page_b->splock);
 }

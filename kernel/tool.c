@@ -33,3 +33,17 @@ inline unsigned long get_order_2(unsigned long n) {
   }
   return order;
 }
+unsigned long power(unsigned long base, unsigned long exponent) {
+  if (exponent == 0) {
+    return 1;
+  }
+  unsigned long result = 1;
+  while (exponent > 0) {
+    if (exponent % 2 == 1) {
+      result *= base;
+    }
+    base *= base;
+    exponent /= 2;
+  }
+  return result;
+}

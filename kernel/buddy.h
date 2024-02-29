@@ -30,12 +30,10 @@ enum migratetype {
 #endif
 
 struct free_area {
-  unsigned long nr_free;
   struct spinlock splock;
   struct list_head list;
 };
 struct active_area {
-  unsigned long nr_active;
   struct spinlock splock;
   struct list_head list;
 };
@@ -44,6 +42,8 @@ struct zone {
   unsigned long actual_max_order; // the actural order we manage 
   struct free_area free_area[MAX_ORDER];
   struct active_area active_area[MAX_ORDER];
+  unsigned long nr_free;
+  unsigned long nr_active;
 };
 struct pglist_data {
   struct free_area free_area[MAX_ORDER];
