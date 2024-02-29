@@ -30,7 +30,7 @@ struct list_head {
 
 #define LIST_HEAD(name) \
 	struct list_head name = LIST_HEAD_INIT(name)
-
+// 
 /**
  * list_entry - get the struct for this entry
  * @ptr:	the &struct list_head pointer.
