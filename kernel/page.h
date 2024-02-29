@@ -15,12 +15,17 @@ struct page {
     int ref; // reference
     struct zone* belg_zone;
 
+    /* lru */
 	uint page_type;
 	uint active;
     uint evictable;
     uint dirty;
     uint reclaim;
     struct list_head lru;
+
+    /* swap */
+    uint in_swap_cache;
+
     struct page *next;
 };
 
