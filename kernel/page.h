@@ -6,7 +6,7 @@ some memory-related operations
 #define PAGE_H
 #include "sleeplock.h"
 #include "types.h"
-#include "swap.h"
+#include "lru.h"
 
 struct page {
     struct sleeplock sllock; // protect the page 
@@ -15,9 +15,11 @@ struct page {
     int ref; // reference
     struct zone* belg_zone;
 
-	unsigned int page_type;
-	unsigned int active;
-    unsigned int evictable;
+	uint page_type;
+	uint active;
+    uint evictable;
+    uint dirty;
+    uint reclaim;
     list_head lru;
     struct page *next;
 };
