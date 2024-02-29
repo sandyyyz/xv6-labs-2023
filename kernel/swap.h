@@ -9,11 +9,6 @@
 #define PAGEVEC_SIZE 14 //struct pagevec
 
 
-struct list_head {//双向链表
-    struct list_head *next, *prev;
-}
-
-
 enum lru_list {
 	LRU_INACTIVE_ANON = LRU_BASE,//0
 	LRU_ACTIVE_ANON = LRU_BASE + LRU_ACTIVE,//1
@@ -24,10 +19,15 @@ enum lru_list {
 };
 
 
+struct list_head {//双向链表
+    struct list_head *next, *prev;
+};
+
+
 struct zone_reclaim_stat {
 	/* The anon LRU stats live in [0], file LRU stats in [1]*/
-	unsigned long recent_rotated[2];//最近移植末尾
-	unsigned long recent_scanned[2];//最近扫描
+	unsigned long recent_rotated[2];
+	unsigned long recent_scanned[2];
 };
 
 
@@ -43,22 +43,7 @@ struct zone {
     /* lru链表使用的自旋锁 
      * 当需要修改lru链表描述符中任何一个链表时，都需要持有此锁，也就是说，不会有两个不同的lru链表同时进行修改
      */
-    spinlock_t lru_lock;
+    //spinlock_t lru_lock;
     /* lru链表描述符 */
     struct lruvec lruvec;
-}
-
-
-/*  
- * LRU缓存
- */
-struct pagevec {
-    /* 当前数量 */
-    unsigned long nr;
-    /* 指针数组，每一项都可以指向一个页描述符，默认大小是14 */
-    struct page *pages[PAGEVEC_SIZE];
 };
-
-static void __lru_cache_add(struct page *page);
-
-void __pagevec_lru_add(struct pagevec *pvec);
