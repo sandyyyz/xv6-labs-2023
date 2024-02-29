@@ -1,3 +1,4 @@
+
 #include "lru.h"
 #include "types.h"
 #include "list.h"
@@ -45,7 +46,7 @@ static void __lru_add(struct page *page) {
 
 void rotate_reclaimable_page(struct page *page) {
 
-    if (!page->active && page->lru) {
+    if (!page->active) {
 
         int file = page->page_type;
 
@@ -87,7 +88,7 @@ void rotate_reclaimable_page(struct page *page) {
 
 void deactivate_page(struct page *page) {
 
-    if (!page->evictable || !page->active || !page->lru)
+    if (!page->evictable || !page->active)
         return;
 
     int file = page->page_type;
@@ -128,7 +129,7 @@ void deactivate_page(struct page *page) {
 
 void activate_page(struct page *page) {
 
-    if (!page->evictable || page->active || !page->lru)
+    if (!page->evictable || page->active)
         return;
 
     int file = page->page_type;

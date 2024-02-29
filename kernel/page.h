@@ -20,7 +20,7 @@ struct page {
     uint evictable;
     uint dirty;
     uint reclaim;
-    list_head lru;
+    struct list_head lru;
     struct page *next;
 };
 

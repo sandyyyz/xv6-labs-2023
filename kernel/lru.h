@@ -32,7 +32,13 @@ struct zone_reclaim_stat {
 
 
 struct lruvec {//链表描述符
-    //5个双向链表头
+    /*
+	 * LRU_INACTIVE_ANON
+	 * LRU_ACTIVE_ANON
+	 * LRU_INACTIVE_FILE
+	 * LRU_ACTIVE_FILE
+	 * LRU_UNEVICTABLE
+	 */
 	struct list_head lists[NR_LRU_LISTS];
     
 	struct zone_reclaim_stat reclaim_stat;
@@ -40,10 +46,13 @@ struct lruvec {//链表描述符
 
 
 struct zone {
-    /* lru链表使用的自旋锁 
-     * 当需要修改lru链表描述符中任何一个链表时，都需要持有此锁，也就是说，不会有两个不同的lru链表同时进行修改
-     */
-    //spinlock_t lru_lock;
-    /* lru链表描述符 */
     struct lruvec lruvec;
 };
+
+static void __lru_add(struct page *page);
+
+void rotate_reclaimable_page(struct page *page);
+
+void deactivate_page(struct page *page);
+
+void activate_page(struct page *page);
