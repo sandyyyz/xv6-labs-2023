@@ -126,15 +126,57 @@ int add_to_swap_cache(struct page *page, swp_entry_t entry)
 }
 
 
-static unsigned long do_swap_page()
+static unsigned long do_swap_page(struct vm_fault *vmf)
 {
-    struct page *page;
+    struct vm_area_struct *vma = vmf->vma;
+    struct page *page, *swapcache;
     swp_entry_t entry;
-    unsigned long offset;
-    int type;
-
-    /* reassign new pages */
+    //unsigned long offset;
+    //int type;
+    pte_t pte;
 
     /* read back the data corresponding to this virtual address from the swap partition */
-    entry = pte_to_swp_entry();
+    entry.val = pte_to_swp_entry(vmf->orig_pte);
+
+    /* check whether the page you are looking for exists in the swap cache */
+    page = lookup_swap_cache(entry, vma, vmf->address);
+    swapcache = page;
+
+    /* reassign new pages */
+   if (!page) {
+        /* If the page isn't found in the swap cache, try to read it from the swap device */
+        page = swapin_read(entry, vma, vmf->address);
+        if (!page)
+            return VM_FAULT_OOM; // Out of memory or cannot read page from swap
+
+        /*
+         * After successfully reading the page into memory, add it to the swap cache
+         * so that subsequent accesses can find it quickly without having to read from
+         * the swap device again.
+         */
+        add_to_swap_cache(page, entry);
+    }
+
+    /*
+     * Now that we have the page, either from the swap cache or after reading it from the
+     * swap device, we need to insert it into the process's page table.
+     */
+    pte.pte = mk_pte(page, vma->vm_page_prot);
+    if (vmf->flags & FAULT_FLAG_WRITE)
+        pte.pte = pte_mkwrite(pte_mkdirty(pte));
+    set_pte_at(vmf->vma->vm_mm, vmf->address, vmf->pte, pte);
+
+    /* Mark the page as accessed and return successfully */
+    mark_page_accessed(page);
+
+    return VM_FAULT_MAJOR;        
+}
+
+unsigned long pte_to_swp_entry(pte_t pte) {
+    return pte.pte;
+}
+
+struct page *lookup_swap_cache(swp_entry_t entry, struct vm_area_struct *vma, unsigned long addr) {
+    struct page *page;
+    /* QAQ */
 }
