@@ -21,9 +21,9 @@ static inline void __decrease_pgref(struct page *page) { page->ref--; }
 static inline struct page *__get_one_invalid_pp() {
   struct page *pp = -1;
   for (int i = 0; i < MAX_MANAGE_PAGES; i++) {
-    if ((manage_pages[i].flags & PAGE_VALID) == 0) {
+    if (page_free(&zone.free_area[i])) {
       acquire(&manage_pages[i].splock);
-      manage_pages[i].flags |= PAGE_VALID;
+      set_occupation_flags(&zone.free_area[i]);
       manage_pages[i].indexp = i;
       __increase_pgref(pp);
       break;
@@ -96,7 +96,7 @@ void init_buddy() {
   if (order >= MAX_ORDER)
     panic("order out of memory range buddy init!");
 
-  struct page *pp = __get_one_invalid_pp();
+  struct page *pp = &manage_pages[buddy_pa2index(manage_start)];
   pp->order = order;
   pp->pfn = PA2PFN((uint64)manage_start);
   __add_to_freelist(pp);
@@ -189,6 +189,9 @@ static struct page *__get_page_from_activelist(unsigned int order) {
   pg->order = order;
   return pg;
 }
+/// @brief remove page from list
+/// @param page
+static inline void rm_from_list(struct page *page) { list_del(page->list); }
 static struct page *__get_page_from_pm(void *pa_start, unsigned int order,
                                        uint64 gfp_mask) {
   char *p;
@@ -210,9 +213,11 @@ static struct page *__get_page_from_pm(void *pa_start, unsigned int order,
   return pg;
 }
 static inline void __add_to_freelist(struct page *page) {
+  page->flags |= PAGE_OCCUPATION;
   list_add_tail(page->list, &zone.free_area[page->order].list);
 }
 static inline void __add_to_activelist(struct page *page) {
+  page->flags &= ~PAGE_OCCUPATION;
   list_add_tail(page->list, &zone.active_area[page->order].list);
 }
 
@@ -221,7 +226,7 @@ static void __buddy_split(unsigned long order) {
   assert(!list_empty(&(zone.free_area[order].list)));
 
   struct page *page_a;
-  struct page *page_b = __get_one_invalid_pp();
+  struct page *page_b = page_a + (1 << (order - 1));
   assert(page_b != -1);
   page_a = get_page_from_freelist(0, order);
 
@@ -233,4 +238,76 @@ static void __buddy_split(unsigned long order) {
   __add_to_activelist(page_b);
   release(&page_a->splock);
   release(&page_b->splock);
+}
+
+static inline unsigned int buddy_page2index(struct page *page) {
+  return page - manage_pages;
+}
+static inline void *buddy_page2pa(struct page *page) {
+  return (void *)((unsigned long)PFN2PA(buddy_page2index(page)) + manage_start);
+}
+
+static inline unsigned long buddy_pa2index(void *pa) {
+  return (unsigned long)(PA2PFN(pa) - PA2PFN(manage_start));
+}
+static inline struct page *buddy_pa2page(void *pa) {
+  return &manage_pages[buddy_pa2index(pa)];
+}
+
+static struct Page *__get_buddy(struct page *page) {
+  unsigned int order = page->order;
+  unsigned int buddy_index = (1 << order) ^ (buddy_page2index(page));
+
+  acquire(&manage_pages[buddy_index].splock);
+  // __increase_pgref(&manage_pages[buddy_index]);
+  return &manage_pages[buddy_index];
+}
+static inline void set_free_flags(struct page *page) {
+  page->flags &= ~PAGE_OCCUPATION;
+}
+static inline void set_occupation_flags(struct page *page) {
+  page->flags |= PAGE_OCCUPATION;
+}
+static inline int page_free(struct page *page) {
+  if (page->flags & PAGE_OCCUPATION)
+    return 0;
+  return 1;
+}
+void free_page(struct page *page) {
+  unsigned int order = page->order;
+  unsigned int order = page->order;
+  assert(order > 0);
+  unsigned int pnum = power2(order);
+
+  struct page *left_page = page;
+  struct page *buddy = __get_buddy(page);
+  struct page *tmp;
+  __add_to_freelist(page);
+
+  // do the compaction when buddy is free
+  // and order is legal
+  while (page_free(buddy) && left_page->order < zone.actual_max_order) {
+    if (left_page > buddy) {
+      tmp = left_page;
+      left_page = buddy;
+      buddy = tmp;
+    }
+    left_page->order += 1;
+    rm_from_list(left_page);
+    rm_from_list(buddy);
+    release(buddy);
+    __add_to_freelist(left_page);
+
+    release(&buddy->splock);
+
+    buddy = __get_buddy(left_page);
+  }
+  set_free_flags(left_page);
+  acquire(&zone.lock);
+  zone.nr_free += pnum;
+  release(&zone.lock);
+
+  release(&left_page->splock);
+
+  return;
 }

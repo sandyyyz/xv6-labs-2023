@@ -38,8 +38,8 @@ struct active_area {
   struct list_head list;
 };
 struct zone {
-  struct spinlock lock; // protect the list maybe
-  unsigned long actual_max_order; // the actural order we manage 
+  struct spinlock lock;           // protect the list maybe
+  unsigned long actual_max_order; // the actural order we manage
   struct free_area free_area[MAX_ORDER];
   struct active_area active_area[MAX_ORDER];
   unsigned long nr_free;
@@ -61,9 +61,5 @@ struct sorder_region {
 // then we declear the interface buddy provided
 
 void init_buddy();
-struct page *alloc_pages(uint64 gfp, unsigned int order);
-#define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0);
-int free_pages(uint64 start_address, uint64 end_address);
-int free_one_page(struct page *page);
-int add_to_freelist(struct page *page, struct zone *zone, unsigned int order,
-                    int migratetype);
+struct page *alloc_pages(uint64 gfp_mask, unsigned int order);
+void free_page(struct page *page);

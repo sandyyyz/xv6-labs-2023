@@ -19,8 +19,8 @@ struct page {
 
 #define PAGE_ZONE(pg) ((struct * page) pg->belg_zone);
 
-#define PFN2PA(pfn) (pfn << PGSHIFT)
-#define PA2PFN(pa) (pa >> PGSHIFT)
-#define PAGE_VALID 1 << 0
+#define PFN2PA(pfn) ((unsigned long)pfn << PGSHIFT)
+#define PA2PFN(pa) ((unsigned long)pa >> PGSHIFT)
+#define PAGE_OCCUPATION 1 << 0
 #define MAX_MANAGE_PAGES (1 << 10)
 #endif
