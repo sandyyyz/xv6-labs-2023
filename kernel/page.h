@@ -25,6 +25,8 @@ struct page {
 
     /* swap */
     uint in_swap_cache;
+    uint PTE;
+
 
     struct page *next;
 };
