@@ -166,3 +166,24 @@ void activate_page(struct page *page) {
 
     reclaim_stat->recent_rotated[file]++;
 }
+
+struct page *lru_to_page(struct list_head *page_list)
+{
+    /* get the element at the end of the LRU linked list 
+     * Because pages at the end of the linked list are 
+     * the least frequently accessed in the LRU management strategy, 
+     * they are good candidates for recycling.
+     */
+    return page_list->prev;
+}
+
+static inline void _list_del(struct list_head *entry)
+{
+    struct list_head *prev = entry->prev;
+
+    struct list_head *next = entry->next;
+
+    next->prev = prev;
+
+    prev->next = next;
+}

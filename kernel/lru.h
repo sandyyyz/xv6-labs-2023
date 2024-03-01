@@ -56,3 +56,7 @@ void rotate_reclaimable_page(struct page *page);
 void deactivate_page(struct page *page);
 
 void activate_page(struct page *page);
+
+struct page *lru_to_page(struct list_head *page_list);
+
+static inline void _list_del(struct list_head *entry);

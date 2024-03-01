@@ -4,6 +4,8 @@
 
 #define MAX_SWAPFILES 32
 
+
+
 struct swap_info_struct {
     unsigned long flags; // 交换分区的状态标识
     signed short prio; // 交换分区的优先
@@ -15,3 +17,7 @@ struct swap_info_struct {
     unsigned int pages; // 交换分区中可用的总页数
     unsigned int inuse_pages; // 当前被占用的页数
 };
+
+typedef struct {
+	unsigned long val;
+} swp_entry_t;
