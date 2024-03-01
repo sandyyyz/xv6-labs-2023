@@ -17,7 +17,7 @@ struct page manage_pages[MAX_MANAGE_PAGES]; // pages being managed in the system
 static inline void __increase_pgref(struct page *page) { page->ref++; }
 static inline void __decrease_pgref(struct page *page) { page->ref--; }
 /// @brief get one locked invalid page, set the page valid
-/// @return
+/// @return return the page
 static inline struct page *__get_one_invalid_pp() {
   struct page *pp = -1;
   for (int i = 0; i < MAX_MANAGE_PAGES; i++) {
@@ -112,13 +112,14 @@ void init_buddy() {
 
 static struct page *__alloc_pages(uint64 gfp_mask, unsigned int order) {
   struct page *pp;
-find:
   if (!list_empty(&(zone.free_area[order].list))) {
     pp = get_page_from_freelist(gfp_mask, order);
   }
 
   return -1;
 }
+
+/// @brief allocate page with indicated order (locked)
 struct page *alloc_pages(uint64 gfp_mask, unsigned int order) {
   if (order < 0 || order > zone.actual_max_order ||
       power2(order) > zone.nr_free)
@@ -126,10 +127,17 @@ struct page *alloc_pages(uint64 gfp_mask, unsigned int order) {
   return __alloc_pages(gfp_mask, order);
 }
 
+/// @brief find buddy by pfn
+/// @param page_pfn
+/// @param order
+/// @return
 static inline unsigned long __find_buddy_pfn(unsigned long page_pfn,
                                              unsigned int order) {
   return page_pfn ^ (1 << order);
 }
+
+/// @brief get page from free list with indicated order
+///        may split the pages
 static struct page *get_page_from_freelist(unsigned long gfp_mask,
                                            unsigned int order) {
   if (order < 0 || order > zone.actual_max_order)
@@ -176,6 +184,7 @@ static struct page *__get_page_from_freelist(unsigned int order) {
   pg->order = order;
   return pg;
 }
+
 static struct page *__get_page_from_activelist(unsigned int order) {
 
   acquire(&zone.active_area[order].splock);
